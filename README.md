@@ -1,1 +1,155 @@
 # claude-title2api-tasker
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+这是一个利用 Claude Web UI 未公开的标题生成 API 实现的轻量级、免费的微型推理工具。它允许用户直接与一个专门用于文本摘要、分类和短答案生成的模型进行交互，而无需消耗主对话的 Token 额度。
+
+## 项目背景与致谢
+
+本项目的所有 API 分析和实现，均基于对 Claude 镜像站 **[fuclaude](https://github.com/wozulong/fuclaude)** 的逆向工程探索。`fuclaude` 作为一个功能完善的镜像站，为观察和理解 Claude 前后端通信协议提供了宝贵的平台。
+
+**核心原理：**
+
+在对 `fuclaude` 镜像站的网络通信进行分析时，发现了一个有趣的 API 端点：
+
+POST /api/organizations/{org_uuid}/chat_conversations/{conv_uuid}/title
+
+推断，这个功能由一个独立的、轻量化的模型提供服务，其调用很可能不计入用户的常规使用额度。进一步的探索揭示了该接口是一个**一次性且敏感**的接口。
+
+为了应对这一特性，本脚本采用了**“阅后即焚” (Burn After Reading)** 的工作模式。这是目前已知的、实现稳定连续调用的最可靠方法。
+
+**工作流程如下：**
+
+1.  **用户输入**一个请求。
+2.  脚本在后台**创建一个全新的、临时的对话**。
+3.  使用这个纯净的对话 UUID，向 `/title` 接口**发起一次性的命名请求**。
+4.  获取并显示模型返回的标题（即答案）。
+5.  **无论成功与否，立即销毁本次使用的临时对话**。
+
+通过这个“创建-请求-销毁”的循环，确保了每一次推理都在一个绝对隔离和干净的环境中进行，从而实现了稳定、可靠的连续调用。
+
+## 主要功能
+
+- **轻量级交互**：提供一个简单的命令行界面，专注于快速的单轮推理任务。
+- **免费调用**：利用辅助性 API，理论上不消耗您的消息额度。
+- **指令跟随**：通过精心设计的 Prompt，可以引导模型完成特定任务。
+- **阅后即焚，高度稳定**：为每次请求使用独立的对话，保证了极高的成功率和稳定性。
+- **自动清理**：所有临时对话都会被立即删除，保持您的账户对话列表干净整洁。
+- **灵活的消息构造器**：支持自定义 `Message` 数量和内容，以进行高级实验。
+
+## 如何使用
+
+1.  **配置脚本：**
+    打开 `main.py` 文件，找到顶部的配置区，将 `SESSION_KEY` 替换为您自己的有效会话密钥。
+
+2.  **安装依赖：**
+    ```bash
+    pip install cloudscraper
+    ```
+
+3.  **运行脚本：**
+    ```bash
+    python main.py
+    ```
+
+4.  **开始推理：**
+    脚本成功连接后，您会看到一个交互式的消息构造器。根据提示输入即可。
+
+## 使用示例与最佳实践
+
+### 示例 1: 简单计算
+
+这种直接的任务，模型通常能很好地理解。
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+IGNORE_WHEN_COPYING_END
+
+--- 消息内容构造器 ---
+请输入 Message 的数量 (默认为 2): [回车]
+请输入 Message 1 的内容:
+256 * 4 = ? 请将最终计算结果作为标题
+EOF
+是否为 Message 2 使用自动填充内容? (默认为 Y): [回车]
+...
+
+模型生成的标题 (答案): 1024
+
+### 示例 2: 知识问答
+
+模型可以调用其内部知识库来回答。
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+IGNORE_WHEN_COPYING_END
+
+--- 消息内容构造器 ---
+请输入 Message 的数量 (默认为 2): [回车]
+请输入 Message 1 的内容:
+Linux 操作系统的吉祥物是什么？请将答案作为标题
+EOF
+...
+
+模型生成的标题 (答案): Tux the Penguin
+
+### 示例 3: 复杂的选择题（最佳实践演示）
+
+这个例子展示了如何通过**精炼 Prompt** 来提高模型的指令跟随能力。
+
+**第一次尝试 (指令较模糊，可能失败):**
+当 Prompt 过于开放，或将选项分散在多个 `Message` 中时，模型可能优先选择“概括摘要”，而不是“严格执行指令”。
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+IGNORE_WHEN_COPYING_END
+
+模型生成的标题 (答案): Three-Body Problem: Wallgazer's Laughter
+
+---
+
+**第二次尝试 (优化后的最佳实践):**
+为了让模型更“听话”，遵循以下原则：
+1.  将所有信息和约束条件都放入 `Message 1`。
+2.  使用明确、强约束的词语（如“严格”、“仅仅”、“不要添加”）。
+3.  保持 `Message` 数量较少（通常为 1 或 2）。
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+IGNORE_WHEN_COPYING_END
+
+--- 消息内容构造器 ---
+请输入 Message 的数量 (默认为 2): [回车]
+请输入 Message 1 的内容:
+请严格从以下四个选项中选择一个词，以描述“呵呵，呵呵哈哈哈哈！你笑了，你也笑了，一个面壁者的笑，对另一个面壁者的笑”这句话所表达的情感。
+选项：开心, 愤怒, 自嘲, 悲伤
+不要添加任何其他文字、解释或符号，仅仅将你选择的那个中文词语作为标题。
+EOF
+是否为 Message 2 使用自动填充内容? (默认为 Y): [回车]
+...
+
+模型生成的标题 (答案): 自嘲
+
+**分析：** **效果显著！** 通过优化 Prompt，模型完美地遵循了指令。
+
+## 探索性内容（待补充）
+
+### 模型智能程度估计
+
+-   *初步观察，该模型的逻辑推理和指令跟随能力相当不错。它更擅长执行单点、明确的指令任务，如简单计算、格式转换、关键词提取和分类。对于包含强大文化或背景符号的开放式问题，它可能优先选择“概括摘要”而非“严格执行指令”，此时需要通过更具约束性的 Prompt 来引导其行为。*
+
+### 上下文长度估计
+
+-   *该模型作为标题生成器，其设计的上下文长度可能远小于主聊天模型。具体能处理多长的 `message_content` 需要通过实验来确定。可以尝试逐步增加输入内容的长度，观察从哪个点开始模型返回的标题质量下降或出现截断。*
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+IGNORE_WHEN_COPYING_END
