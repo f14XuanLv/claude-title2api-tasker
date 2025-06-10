@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-claude-title2api-tasker - v0.1.0
+claude-title2api-tasker - v0.1.1
 
 利用 Claude 的标题生成接口实现一个轻量级的、免费的微型智能工具。
 作者: f14xuanlv
 基于对 fuclaude 的逆向工程发现。
+
+版本 0.1.1:
+- 增加了对 SESSION_KEY 的启动预检查和更友好的错误提示。
+- 增强了连接初始化时的异常处理，对403错误给出明确指引。
 
 版本 0.1.0:
 - 采用经过验证的“阅后即焚”模式，为每一次请求创建并销毁一个独立的对话，以确保最高的稳定性和成功率。
@@ -77,7 +81,12 @@ class TitleAPIClient:
             logger.info(f"成功获取组织 UUID: {self.org_uuid}")
             return True
         except Exception as e:
-            logger.error(f"连接初始化失败: {e}")
+            # 增强的异常处理：检查是否为 HTTP 403 Forbidden 错误
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 403:
+                logger.error("连接初始化失败: 身份验证失败 (403 Forbidden)。")
+                logger.error("请检查您的 SESSION_KEY 是否正确且有效。")
+            else:
+                logger.error(f"连接初始化失败: {e}")
             return False
             
     def create_conversation(self, conv_uuid: str) -> bool:
@@ -141,7 +150,6 @@ def construct_message_content() -> str:
     
     messages = []
     for i in range(1, num_messages + 1):
-        # 仅当消息总数为2时，对 Message 2 提供自动填充选项
         if i == 2 and num_messages == 2:
             auto_fill_choice = input("是否为 Message 2 使用自动填充内容? (Y/n, 默认为 Y): ").strip().lower()
             if auto_fill_choice != 'n':
@@ -174,14 +182,11 @@ def main_loop(client: TitleAPIClient):
                 print("未输入任何内容，请重新构造。")
                 continue
             
-            # --- “阅后即焚”核心逻辑 ---
-            # 1. 为本次请求创建全新的对话
             conv_uuid = str(uuid.uuid4())
             if not client.create_conversation(conv_uuid):
                 print("错误：无法创建临时对话，请重试。\n")
                 continue
 
-            # 2. 构造载荷并发起请求
             print("...\n")
             title = client.request_title(conv_uuid, message_content)
             
@@ -200,14 +205,20 @@ def main_loop(client: TitleAPIClient):
         except Exception as e:
             logger.error(f"循环中发生错误: {e}")
         finally:
-            # 3. 无论成功与否，立即销毁本次对话
             if conv_uuid:
                 logger.info("清理本次请求的对话...")
                 client.delete_conversation(conv_uuid)
 
 
 if __name__ == "__main__":
-    print("--- 启动 claude-title2api-tasker v0.1.0 ---")
+    print("--- 启动 claude-title2api-tasker v0.1.1 ---")
+    
+    # 启动时预检查 SESSION_KEY
+    if not SESSION_KEY:
+        logger.error("配置错误: SESSION_KEY 为空。")
+        logger.error("请打开脚本文件，在 '配置区' 填入您的 sessionKey。")
+        sys.exit(1)
+
     api_client = TitleAPIClient(BASE_URL, ANTHROPIC_CLIENT_PLATFORM)
     api_client.set_session_key(SESSION_KEY)
     

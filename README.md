@@ -59,40 +59,33 @@ POST /api/organizations/{org_uuid}/chat_conversations/{conv_uuid}/title
 
 ### 示例 1: 简单计算
 
-这种直接的任务，模型通常能很好地理解。
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
+这种直接的任务，模型通常能很好地理解，Message数量选1效果可能更好。
 
+```bash
 --- 消息内容构造器 ---
-请输入 Message 的数量 (默认为 2): [回车]
-请输入 Message 1 的内容:
-256 * 4 = ? 请将最终计算结果作为标题
-EOF
-是否为 Message 2 使用自动填充内容? (默认为 Y): [回车]
+请输入 Message 的数量 (1-50, 默认为 2): 1
+请输入 Message 1 的内容 (输入完成后，在新行单独输入 'EOF' 或 'eof' 结束):
+请将 1024*256 的答案作为标题
+eof
 ...
 
-模型生成的标题 (答案): 1024
+模型生成的标题 (答案): 262,144
+```
 
 ### 示例 2: 知识问答
 
-模型可以调用其内部知识库来回答。
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
+模型可以调用其内部知识库来回答，Message数量选1效果可能更好。
 
+```bash
 --- 消息内容构造器 ---
-请输入 Message 的数量 (默认为 2): [回车]
-请输入 Message 1 的内容:
+请输入 Message 的数量 (1-50, 默认为 2): 1
+请输入 Message 1 的内容 (输入完成后，在新行单独输入 'EOF' 或 'eof' 结束):
 Linux 操作系统的吉祥物是什么？请将答案作为标题
 EOF
 ...
 
-模型生成的标题 (答案): Tux the Penguin
+模型生成的标题 (答案): Linux企鹅吉祥物
+```
 
 ### 示例 3: 复杂的选择题（最佳实践演示）
 
@@ -100,11 +93,6 @@ EOF
 
 **第一次尝试 (指令较模糊，可能失败):**
 当 Prompt 过于开放，或将选项分散在多个 `Message` 中时，模型可能优先选择“概括摘要”，而不是“严格执行指令”。
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
 
 模型生成的标题 (答案): Three-Body Problem: Wallgazer's Laughter
 
@@ -115,12 +103,8 @@ IGNORE_WHEN_COPYING_END
 1.  将所有信息和约束条件都放入 `Message 1`。
 2.  使用明确、强约束的词语（如“严格”、“仅仅”、“不要添加”）。
 3.  保持 `Message` 数量较少（通常为 1 或 2）。
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
 
+```bash
 --- 消息内容构造器 ---
 请输入 Message 的数量 (默认为 2): [回车]
 请输入 Message 1 的内容:
@@ -132,6 +116,7 @@ EOF
 ...
 
 模型生成的标题 (答案): 自嘲
+```
 
 **分析：** **效果显著！** 通过优化 Prompt，模型完美地遵循了指令。
 
@@ -148,8 +133,3 @@ EOF
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
