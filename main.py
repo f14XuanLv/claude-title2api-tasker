@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-claude-title2api-tasker - v0.1.1
+claude-title2api-tasker - v0.2.0
 
 利用 Claude 的标题生成接口实现一个轻量级的、免费的微型智能工具。
 作者: f14xuanlv
 基于对 fuclaude 的逆向工程发现。
+
+版本 0.2.0:
+- 新增“智能向导模式”，采用“三明治结构+强硬指令”策略，自动将用户输入包装成高服从性Prompt。
+- 保留原有的“经典自由模式”，供高级用户进行Prompt实验。
+- 程序启动时提供模式选择，提升用户体验。
 
 版本 0.1.1:
 - 增加了对 SESSION_KEY 的启动预检查和更友好的错误提示。
@@ -81,7 +86,6 @@ class TitleAPIClient:
             logger.info(f"成功获取组织 UUID: {self.org_uuid}")
             return True
         except Exception as e:
-            # 增强的异常处理：检查是否为 HTTP 403 Forbidden 错误
             if hasattr(e, 'response') and e.response is not None and e.response.status_code == 403:
                 logger.error("连接初始化失败: 身份验证失败 (403 Forbidden)。")
                 logger.error("请检查您的 SESSION_KEY 是否正确且有效。")
@@ -131,9 +135,10 @@ def get_multiline_input(prompt: str) -> str:
             break
     return "\n".join(lines)
 
-def construct_message_content() -> str:
-    """交互式地构建 message_content 字符串。"""
-    print("\n--- 消息内容构造器 ---")
+# --- 经典自由模式 ---
+def construct_message_classic_mode() -> str:
+    """交互式地构建 message_content 字符串（经典模式）。"""
+    print("\n--- 消息内容构造器 (经典模式) ---")
     while True:
         try:
             num_messages_str = input("请输入 Message 的数量 (1-50, 默认为 2): ").strip()
@@ -150,6 +155,7 @@ def construct_message_content() -> str:
     
     messages = []
     for i in range(1, num_messages + 1):
+        # 这是一个小技巧，对于双消息模式，自动填充第二条，引导用户把重点放在第一条
         if i == 2 and num_messages == 2:
             auto_fill_choice = input("是否为 Message 2 使用自动填充内容? (Y/n, 默认为 Y): ").strip().lower()
             if auto_fill_choice != 'n':
@@ -164,22 +170,63 @@ def construct_message_content() -> str:
         
     return "\n\n".join(messages)
 
-def main_loop(client: TitleAPIClient):
+# --- 智能向导模式 ---
+def construct_message_wizard_mode() -> str:
+    """通过向导模式构建 message_content 字符串。"""
+    print("\n--- 新任务构造 (智能向导模式) ---")
+    
+    core_content = get_multiline_input(
+        "第一步：请输入您想让模型处理的核心内容 (例如一段文章、一个问题和选项等)"
+    )
+    
+    print("-" * 20)
+    task_instruction = input(
+        "第二步：请输入您的任务指令 (例如: '将上述文本的情感分类为积极或消极', "
+        "'提取文本中的所有网址', '将答案作为标题输出'等):\n> "
+    ).strip()
+    
+    if not core_content.strip() or not task_instruction.strip():
+        print("错误：核心内容和任务指令都不能为空。")
+        return ""
+
+    start_instruction = (
+        f"TASK: Carefully analyze the content provided below and follow the final instruction.\n"
+        f"RULE: Your output will be used as a title, so it must be concise and directly "
+        f"address the instruction. Do not add any extra text or explanations.\n\n"
+        f"--- CONTENT START ---"
+    )
+    
+    end_instruction = (
+        f"\n--- CONTENT END ---\n\n"
+        f"INSTRUCTION: {task_instruction}"
+    )
+    
+    final_content = f"Message 1:\n\n{core_content}"
+    
+    final_message_content = f"{start_instruction}\n\n{final_content}\n{end_instruction}"
+    logger.debug(f"最终生成的 message_content:\n{final_message_content}")
+    return final_message_content
+
+def main_loop(client: TitleAPIClient, mode: str):
     """主交互循环 - 采用“阅后即焚”模式。"""
-    logger.info("微型推理工具准备就绪（阅后即焚模式）。")
+    mode_name = "智能向导" if mode == '1' else "经典自由"
+    logger.info(f"微型推理工具准备就绪（{mode_name}模式）。")
     print("\n" + "="*50)
-    print(" 欢迎使用 Claude 标题微型推理工具！")
-    print(" 在下方输入你想让模型处理的内容。")
-    print(" 技巧：在内容结尾加上 '请将[xxx]作为标题' 以指导模型。")
+    print(f" 欢迎使用 Claude 标题微型推理工具！")
+    print(f" 当前模式: {mode_name}")
     print(" 输入 'exit' 或 'quit' 退出。")
     print("="*50 + "\n")
 
     while True:
         conv_uuid = None
         try:
-            message_content = construct_message_content()
+            if mode == '1':
+                message_content = construct_message_wizard_mode()
+            else:
+                message_content = construct_message_classic_mode()
+            
             if not message_content.strip():
-                print("未输入任何内容，请重新构造。")
+                print("未输入任何内容或构造失败，请重新开始。\n")
                 continue
             
             conv_uuid = str(uuid.uuid4())
@@ -187,33 +234,50 @@ def main_loop(client: TitleAPIClient):
                 print("错误：无法创建临时对话，请重试。\n")
                 continue
 
-            print("...\n")
+            print("\n正在向 Claude 发起请求...")
             title = client.request_title(conv_uuid, message_content)
             
+            print("-" * 20)
             if title:
-                print(f"模型生成的标题 (答案): {title}\n")
+                print(f"✅ 模型返回结果: {title}")
             else:
-                print("未能获取标题，请检查网络或输入。\n")
+                print("❌ 未能获取结果，请检查网络或输入。")
+            print("-" * 20 + "\n")
 
-            exit_choice = input("继续构造新消息? (Y/n, 默认为 Y): ").strip().lower()
+            exit_choice = input("继续构造新任务? (Y/n, 默认为 Y): ").strip().lower()
             if exit_choice == 'n':
                 break
 
         except (KeyboardInterrupt, EOFError):
-            print("\n捕获到退出信号...")
-            break
+            if input("\n确认退出吗? (y/N): ").strip().lower() == 'y':
+                break
+            else:
+                continue
         except Exception as e:
             logger.error(f"循环中发生错误: {e}")
         finally:
             if conv_uuid:
-                logger.info("清理本次请求的对话...")
+                logger.info(f"清理临时对话 (UUID: {conv_uuid})...")
                 client.delete_conversation(conv_uuid)
+
+def choose_mode():
+    """让用户选择工作模式。"""
+    print("\n请选择工作模式:")
+    print("  1. 智能向导模式 (推荐): 只需输入内容和指令，程序自动优化Prompt。")
+    print("  2. 经典自由模式 (高级): 完全手动构造消息，适合Prompt实验。")
+    
+    while True:
+        choice = input("请输入模式编号 (1/2, 默认为1): ").strip()
+        if not choice:
+            return '1'
+        if choice in ['1', '2']:
+            return choice
+        print("无效输入，请输入 '1' 或 '2'。")
 
 
 if __name__ == "__main__":
-    print("--- 启动 claude-title2api-tasker v0.1.1 ---")
+    print("--- 启动 claude-title2api-tasker v0.2.0 ---")
     
-    # 启动时预检查 SESSION_KEY
     if not SESSION_KEY:
         logger.error("配置错误: SESSION_KEY 为空。")
         logger.error("请打开脚本文件，在 '配置区' 填入您的 sessionKey。")
@@ -223,7 +287,8 @@ if __name__ == "__main__":
     api_client.set_session_key(SESSION_KEY)
     
     if api_client.connect_and_get_org():
-        main_loop(api_client)
+        work_mode = choose_mode()
+        main_loop(api_client, work_mode)
     else:
         logger.error("无法初始化 API 客户端，程序退出。")
         sys.exit(1)
